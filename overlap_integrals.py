@@ -29,16 +29,17 @@ class field():
     
     def integrate_all_dimensions(self):
         if self.ndims == 1:
+            print('integrating dimension 0')
             if self.cs == "cartesian":
-                print('integrating dimension 0')
-                return np.trapz(self.values, x=self.var[0])
-            elif self.cs == "polar":
-                raise NotImplementedError(f"Coordinate system {self.cs} is not implemented.")
+                return np.trapz(self.values, x=self.var[0], axis=0)
+            elif self.cs in ["polar", "cylindrical"]:
+                # raise NotImplementedError(f"Coordinate system {self.cs} is not implemented.")
+                return np.trapz(self.var[0]*self.values, x=self.var[0], axis=0)
         else:
             print(f'integrating dimension {self.ndims-1}')
             newvalues = np.trapz(self.values, x=self.var[-1], axis=self.ndims-1)
-            # print(newvalues.shape)
-            # print(self.ndims-1)
-            # print(self.var)
-            # print(self.var[:-1])
-            return field(newvalues, self.var[:-1], self.cs).integrate_all_dimensions() # recursive call
+            if self.ndims == 3 and self.cs == "cylindrical":
+                newcs = "polar"
+            else:
+                newcs = self.cs
+            return field(newvalues, self.var[:-1], newcs).integrate_all_dimensions() # recursive call
