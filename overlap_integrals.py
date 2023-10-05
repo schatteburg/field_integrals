@@ -53,8 +53,57 @@ class field():
         N = field(self.values*self.values.conj(), self.var, self.cs).integrate_all_dimensions()
         return field(self.values/np.sqrt(N), self.var, self.cs)
     
+    def overlap(self, other: "field") -> float:
+        if not self.cs == other.cs:
+            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
+        elif not self.shape == other.shape:
+            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
+        else:
+            return (self*other.conj()).integrate_all_dimensions()
+
+    ######### magic methods #########
+    # unary operators    
+    def __repr__(self) -> str:
+        return f"field in {self.ndims}D, {self.cs} coordinate system, with shape {self.shape}"
+    
     def __abs__(self) -> "field":
         return field(np.abs(self.values), self.var, self.cs)
     
     def __pow__(self, power: float) -> "field":
         return field(self.values**power, self.var, self.cs)
+    
+    # binary operators
+    def __eq__(self, __value: "field") -> bool:
+        pass # TODO: implement
+    
+    def __add__(self, other: "field") -> "field":
+        if not self.cs == other.cs:
+            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
+        elif not self.shape == other.shape:
+            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
+        else:
+            return field(self.values+other.values, self.var, self.cs)
+    
+    def __subtr__(self, other: "field") -> "field":
+        if not self.cs == other.cs:
+            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
+        elif not self.shape == other.shape:
+            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
+        else:
+            return field(self.values-other.values, self.var, self.cs)
+    
+    def __mul__(self, other: "field") -> "field":
+        if not self.cs == other.cs:
+            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
+        elif not self.shape == other.shape:
+            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
+        else:
+            return field(self.values*other.values, self.var, self.cs)
+    
+    def __div__(self, other: "field") -> "field":
+        if not self.cs == other.cs:
+            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
+        elif not self.shape == other.shape:
+            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
+        else:
+            return field(self.values/other.values, self.var, self.cs)
