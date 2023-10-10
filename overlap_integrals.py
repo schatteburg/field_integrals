@@ -2,6 +2,21 @@ import numpy as np
 from scipy.integrate import quad
 from abc import ABC
 
+
+######### decorators #########
+def checked_field_compatibility(func: callable) -> callable:
+    def wrapper(self, other: "field", *args, **kwargs):
+        if not self.cs == other.cs:
+            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
+        elif not self.shape == other.shape:
+            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
+        else:
+            return func(self, other, *args, **kwargs)
+
+    return wrapper
+
+
+
 class field():
 
     def __init__(self, fieldvalues: np.ndarray, var: list[np.ndarray], coord_sys: str) -> None:
@@ -44,22 +59,22 @@ class field():
                 newcs = "polar"
             else:
                 newcs = self.cs
-            return field(newvalues, self.var[:-1], newcs).integrate_all_dimensions() # recursive call
+            return field(newvalues, self.var[:-1], newcs).integrate_all_dimensions(vocal=vocal) # recursive call
     
-    def normalize(self)-> "field":
-        return field(self.values/self.integrate_all_dimensions(), self.var, self.cs)
+    def normalize(self, vocal: bool = False)-> "field":
+        return field(self.values/self.integrate_all_dimensions(vocal=vocal), self.var, self.cs)
     
-    def normalize_abs2(self) -> "field":
-        N = field(self.values*self.values.conj(), self.var, self.cs).integrate_all_dimensions()
+    def normalize_abs2(self, vocal: bool = False) -> "field":
+        N = field(self.values*self.values.conj(), self.var, self.cs).integrate_all_dimensions(vocal=vocal)
+        # N = (self*self.conj()).integrate_all_dimensions()
         return field(self.values/np.sqrt(N), self.var, self.cs)
     
-    def overlap(self, other: "field") -> float:
-        if not self.cs == other.cs:
-            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
-        elif not self.shape == other.shape:
-            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
-        else:
-            return (self*other.conj()).integrate_all_dimensions()
+    @checked_field_compatibility
+    def overlap(self, other: "field", vocal: bool = False) -> float:
+        return (self*other.conj()).integrate_all_dimensions(vocal=vocal)
+    
+    def conj(self) -> "field":
+        return field(self.values.conj(), self.var, self.cs)
 
     ######### magic methods #########
     # unary operators    
@@ -73,37 +88,26 @@ class field():
         return field(self.values**power, self.var, self.cs)
     
     # binary operators
-    def __eq__(self, __value: "field") -> bool:
-        pass # TODO: implement
+    @checked_field_compatibility
+    def __eq__(self, other: "field") -> bool:
+        return np.all(self.values == other.values) and np.all(self.var == other.var) and self.cs == other.cs
     
+    @checked_field_compatibility
     def __add__(self, other: "field") -> "field":
-        if not self.cs == other.cs:
-            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
-        elif not self.shape == other.shape:
-            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
-        else:
-            return field(self.values+other.values, self.var, self.cs)
+        return field(self.values+other.values, self.var, self.cs)
     
-    def __subtr__(self, other: "field") -> "field":
-        if not self.cs == other.cs:
-            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
-        elif not self.shape == other.shape:
-            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
-        else:
-            return field(self.values-other.values, self.var, self.cs)
+    @checked_field_compatibility
+    def __sub__(self, other: "field") -> "field":
+        return field(self.values-other.values, self.var, self.cs)
     
+    @checked_field_compatibility
     def __mul__(self, other: "field") -> "field":
-        if not self.cs == other.cs:
-            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
-        elif not self.shape == other.shape:
-            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
-        else:
-            return field(self.values*other.values, self.var, self.cs)
+        return field(self.values*other.values, self.var, self.cs)
+
+    @checked_field_compatibility
+    def __truediv__(self, other: "field") -> "field":
+        return field(self.values/other.values, self.var, self.cs)
+
+
     
-    def __div__(self, other: "field") -> "field":
-        if not self.cs == other.cs:
-            raise ValueError(f"Coordinate systems of fields don't match: {self.cs} and {other.cs}.")
-        elif not self.shape == other.shape:
-            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
-        else:
-            return field(self.values/other.values, self.var, self.cs)
+    
