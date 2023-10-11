@@ -19,15 +19,17 @@ def checked_field_compatibility(func: callable) -> callable:
 
 class field():
 
-    def __init__(self, fieldvalues: np.ndarray, coordinates: list[np.ndarray], dims: list[str]) -> None:
+    def __init__(self, fieldvalues: np.ndarray, coordinates: list[np.ndarray], coordinate_system: str) -> None:
+        if coordinate_system in ["polar", "cylindrical", "spherical"]:
+            print("WARNING: for polar/cylindrical/spherical coordinate_systems, coordinates have to follow [r, (theta), phi, (z)] order for correct integration!")
         # if not (type(fieldvalues) == np.ndarray and type(coordinates)==)
 
 
         # check whether number of dimensions match between inputs
-        if not len(fieldvalues.shape) == len(coordinates) and len(fieldvalues.shape) == len(dims):
-            raise ValueError(f"Number of dimensions of inputs don't match:\nlen(fieldvalues.shape) = {len(fieldvalues.shape)};\tlen(coordinates) = {len(coordinates)}, len(dims) = {len(dims)}.")
+        if not len(fieldvalues.shape) == len(coordinates):
+            raise ValueError(f"Number of dimensions of inputs don't match:\nlen(fieldvalues.shape) = {len(fieldvalues.shape)};\tlen(coordinates) = {len(coordinates)}.")
         else:
-            self.ndims = len(dims)
+            self.ndims = len(coordinates)
         
         # check whether number of points per dimension match between inputs
         if not fieldvalues.shape == tuple(v.size for v in coordinates):
@@ -35,14 +37,13 @@ class field():
         else:
             self.shape = fieldvalues.shape
         
-        # check whether number of dimensions are supported
-        for dim in dims:
-            if dim not in ["x","y","z","r","theta","phi"]:
-                raise ValueError(f"Dimension {dim} is not supported.")
-        
+        # check whether number of dimensions and coordinate system are supported
+        if self.ndims == 1 and coordinate_system not in ["cartesian", "polar"]  or self.ndims == 2 and coordinate_system not in ["cartesian", "polar"] or self.ndims == 3 and coordinate_system not in ["cartesian", "cylindrical","spherical"] or self.ndims > 3 or self.ndims <=0:
+            raise ValueError(f'Number of dimensions ({self.ndims}) and/or coordinate system ({coordinate_system}) are not supported.')
+
         self.values = fieldvalues
         self.coordinates = coordinates
-        self.dims = dims
+        self.coordinate_system = coordinate_system
     
     # def integrate_all_dimensions(self, vocal: bool = False) -> float:
     #     if self.ndims == 1:
@@ -64,13 +65,13 @@ class field():
     #         return field(newvalues, self.coordinates[:-1], newcs).integrate_all_dimensions(vocal=vocal) # recursive call
 
     def integrate_all_dimensions(self, vocal: bool = False) -> float:
-        res = self.integrate_dimensions(dims=self.dims, vocal=vocal)
+        res = self.integrate_dimensions(dims=list(range(self.ndims)), vocal=vocal)
         if type(res) == field:
             return res.values
         else:
             return res
     
-    def integrate_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> "field":
+    def integrate_dimensions(self, dims: list[int], limits: Optional[list[tuple[float, float]]] = None, vocal: bool = False) -> "field":
         # check whether lists of dimensions and limits match in length
         if limits is None:
             limits = [(self.coordinates[dim][0], self.coordinates[dim][-1]) for dim in dims]
@@ -78,36 +79,32 @@ class field():
             raise ValueError(f"Number of dimensions ({len(dims)}) and limits ({len(limits)}) don't match.")
         
         integrand = self.values
-        for idim, (dim, limit) in enumerate(zip(dims,limits)):
+        for dim, limit in zip(dims,limits):
             # check whether limits are valid for each dimension
-            if dim not in self.dims:
-                raise ValueError(f"Dimension {dim} is not defined for this field.")
+            if dim >= self.ndims:
+                raise ValueError(f"Dimension {dim} is out of bounds for field with {self.ndims} dimensions.")
             if limit[0] >= limit[1]:
                 raise ValueError(f"Lower limit {limit[0]} is greater than upper limit {limit[1]} for dimension {dim}.")
-            if limit[0] < self.coordinates[idim][0] or limit[1] > self.coordinates[idim][-1]:
+            if limit[0] < self.coordinates[dim][0] or limit[1] > self.coordinates[dim][-1]:
                 raise ValueError(f"Integration limits {limit} are out of bounds for dimension {dim}.")
 
             if vocal:
-                print(f"integrating dimension {idim}: {dim} from {limit[0]} to {limit[1]}")
+                print(f"integrating dimension {dim} from {limit[0]} to {limit[1]}")
 
             # adapting line element for polar/cylindrical/spherical coordinates
-            if dim == "phi":
-                if "theta" in self.dims:
-                    integrand = integrand*self.coordinates[0]*np.sin(self.coordinates[1]) # multiply with r*sin(theta) when integrating over phi in spherical coordinates
-                else:
-                    integrand = integrand*self.coordinates[0] # multiply with r when integrating over phi in polar/cylindrical coordinates
-            elif dim == "theta":
-                integrand = integrand*self.coordinates[0] # multiply with r when integrating over theta
-                
+            if self.coordinate_system in ["polar","cylindrical","spherical"] and dim == 1:
+                integrand = integrand*self.coordinates[0] # multiply with r when integrating over phi/theta
+            elif self.coordinate_system == "spherical" and dim == 2:
+                integrand = integrand*self.coordinates[0]*np.sin(self.coordinates[1]) # multiply with r*sin(theta) when integrating over phi
 
             # actual integration
-            ilim = [np.argmin(np.abs(self.coordinates[idim]-limit[0])), np.argmin(np.abs(self.coordinates[idim]-limit[1]))]
-            integrand = np.trapz(integrand[ilim[0]:ilim[1]+1], x=self.coordinates[idim][ilim[0]:ilim[1]+1], axis=idim)
+            ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))]
+            integrand = np.trapz(integrand[ilim[0]:ilim[1]+1], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=dim)
         
         if len(dims) == self.ndims:
             return integrand
         else:
-            return field(integrand, [self.coordinates[dim] for idim,dim in enumerate(self.dims) if dim not in dims], [self.dims[dim] for idim,dim in enumerate(self.dims) if dim not in dims])
+            return field(integrand, [self.coordinates[dim] for dim in range(self.ndims) if dim not in dims], self.coordinate_system)
             
 
     
