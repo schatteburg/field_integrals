@@ -19,7 +19,7 @@ def checked_field_compatibility(func: callable) -> callable:
 
 class field():
 
-    def __init__(self, fieldvalues: np.ndarray, coordinates: dict) -> None:
+    def __init__(self, fieldvalues: np.ndarray, coordinates: dict, coordinate_system=None, vocal=False) -> None:
         # if not (type(fieldvalues) == np.ndarray and type(coordinates)==)
 
 
@@ -42,7 +42,10 @@ class field():
         if np.all([dim in ["x","y","z"] for dim in coordinates.keys()]):
             self.coordinate_system = "cartesian"
         elif set(["r","phi"]) == set(coordinates.keys()):
-            self.coordinate_system = "polar"
+            if coordinate_system is None:
+                self.coordinate_system = "polar"
+            else:
+                self.coordinate_system = coordinate_system
         elif set(["r","phi","z"]) == set(coordinates.keys()):
             self.coordinate_system = "cylindrical"
         elif set(["r","theta","phi"]) == set(coordinates.keys()):
@@ -53,25 +56,8 @@ class field():
         self.values = fieldvalues
         self.coordinates = coordinates
         self.dims = list(coordinates.keys())
-    
-    # def integrate_all_dimensions(self, vocal: bool = False) -> float:
-    #     if self.ndims == 1:
-    #         if vocal:
-    #             print('integrating dimension 0')
-    #         if self.coordinate_system == "cartesian":
-    #             return np.trapz(self.values, x=self.coordinates[0], axis=0)
-    #         elif self.coordinate_system in ["polar", "cylindrical"]:
-    #             # raise NotImplementedError(f"Coordinate system {self.coordinate_system} is not implemented.")
-    #             return np.trapz(self.coordinates[0]*self.values, x=self.coordinates[0], axis=0)
-    #     else:
-    #         if vocal:
-    #             print(f'integrating dimension {self.ndims-1}')
-    #         newvalues = np.trapz(self.values, x=self.coordinates[-1], axis=self.ndims-1)
-    #         if self.ndims == 3 and self.coordinate_system == "cylindrical":
-    #             newcs = "polar"
-    #         else:
-    #             newcs = self.coordinate_system
-    #         return field(newvalues, self.coordinates[:-1], newcs).integrate_all_dimensions(vocal=vocal) # recursive call
+        if vocal:
+            print(self)
 
     def integrate_all_dimensions(self, vocal: bool = False) -> float:
         return self.integrate_dimensions(dims=self.dims, vocal=vocal)
@@ -83,7 +69,49 @@ class field():
         elif len(dims) != len(limits):
             raise ValueError(f"Number of dimensions ({len(dims)}) and limits ({len(limits)}) don't match.")
         
+
         integrand = self.values
+        # if self.coordinate_system == "cartesian":
+        #     integrand = self.values
+        # # adapting line element for polar/cylindrical/spherical coordinates
+        # elif self.coordinate_system == "polar":
+        #     rg, phig = np.meshgrid(self.coordinates["r"], self.coordinates["phi"], indexing="ij")
+        #     integrand = self.values*rg
+        # elif self.coordinate_system == "cylindrical":
+        #     rg, phig, zg = np.meshgrid(self.coordinates["r"], self.coordinates["phi"], self.coordinates["z"], indexing="ij")
+        #     integrand = self.values*rg
+        # elif self.coordinate_system == "spherical":
+        #     rg, thetag, phig = np.meshgrid(self.coordinates["r"], self.coordinates["theta"], self.coordinates["phi"], indexing="ij")
+        #     integrand = self.values*rg*rg*np.sin(thetag)
+        # else:
+        #     raise ValueError(f"Coordinate system {self.coordinate_system} is not supported.")
+
+        mg = np.meshgrid(*[coord for dim, coord in self.coordinates.items()], indexing="ij")
+
+        # # # adapting line element for polar/cylindrical/spherical coordinates
+        # if self.coordinate_system in ["polar", "cylindrical"]:
+        #     if "r" in dims:
+        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")]
+        # elif self.coordinate_system == "spherical":
+        #     if "r" in dims and "theta" in dims":
+        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")]**2 * np.sin(mg[list(self.coordinates.keys()).index("theta")]) # multiply with r^2*sin(theta) when integrating over r and theta in spherical coordinates
+        #     elif "r" in dims:
+        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over r in spherical coordinates
+        #     elif "theta" in dims:
+        #         integrand = integrand*np.sin(mg[list(self.coordinates.keys()).index("theta")])
+        # elif self.coordinate_system == "cartesian":
+        #     pass
+        # else:
+        #     raise ValueError(f"Coordinate system {self.coordinate_system} is not supported.")
+
+        if "r" in dims:
+            if self.coordinate_system == "spherical":
+                integrand = integrand*mg[list(self.coordinates.keys()).index("r")]**2 # multiply with r^2 when integrating over r in spherical coordinates
+            else:
+                integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over r in polar/cylindrical coordinates
+        if "theta" in dims:
+            integrand = integrand*np.sin(mg[list(self.coordinates.keys()).index("theta")]) # multiply with r when integrating over theta
+
         for idim, (dim, limit) in enumerate(zip(dims,limits)):
             # check whether limits are valid for each dimension
             if dim not in self.coordinates.keys():
@@ -96,24 +124,29 @@ class field():
             if vocal:
                 print(f"integrating dimension {idim}: {dim} from {limit[0]} to {limit[1]}")
 
-            # adapting line element for polar/cylindrical/spherical coordinates
-            if dim == "phi":
-                if self.coordinate_system == "spherical":
-                    integrand = integrand*self.coordinates["r"]*np.sin(self.coordinates["theta"]) # multiply with r*sin(theta) when integrating over phi in spherical coordinates
-                else:
-                    integrand = integrand*self.coordinates["r"] # multiply with r when integrating over phi in polar/cylindrical coordinates
-            elif dim == "theta":
-                integrand = integrand*self.coordinates["r"] # multiply with r when integrating over theta
+            # if dim == "r":
+            #     rg, *_ = np.meshgrid(*[coord for dim, coord in self.coordinates.items()], indexing="ij")
+            #     if self.coordinate_system == "spherical":
+            #         integrand = integrand*rg**2 # multiply with r^2 when integrating over r in spherical coordinates
+            #     else:
+            #         integrand = integrand*rg # multiply with r when integrating over r in polar/cylindrical coordinates
+            # elif dim == "theta":
+            #     rg, thetag, phig = np.meshgrid(self.coordinates["r"], self.coordinates["theta"], self.coordinates["phi"], indexing="ij")
+            #     integrand = integrand*np.sin(thetag) # multiply with r when integrating over theta
                 
 
             # actual integration
             ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))]
-            integrand = np.trapz(integrand[ilim[0]:ilim[1]+1], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=0)
+            integrand = np.trapz(integrand[ilim[0]:ilim[1]+1], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=self.dims.index(dim)-idim)
         
         if isinstance(integrand, float):
             return integrand
         else:
-            return field(integrand, [self.coordinates[dim] for dim in self.dims if dim not in dims])
+            if self.coordinate_system == "spherical" and "theta" in dims:
+                new_coodinate_system = "spherical"
+            else:
+                new_coodinate_system = None
+            return field(integrand, {dim: self.coordinates[dim] for dim in self.dims if dim not in dims}, coordinate_system=new_coodinate_system, vocal=vocal)
             
 
     
@@ -135,7 +168,7 @@ class field():
     ######### magic methods #########
     # unary operators    
     def __repr__(self) -> str:
-        return f"field in {self.ndims}D, coordinates {list(self.coordinates.keys())}, with shape {self.shape}"
+        return f"field in {self.ndims}D, {self.coordinate_system} coordinates {list(self.coordinates.keys())} with shape {self.shape}"
     
     def __abs__(self) -> "field":
         return field(np.abs(self.values), self.coordinates)
