@@ -74,11 +74,7 @@ class field():
     #         return field(newvalues, self.coordinates[:-1], newcs).integrate_all_dimensions(vocal=vocal) # recursive call
 
     def integrate_all_dimensions(self, vocal: bool = False) -> float:
-        res = self.integrate_dimensions(dims=self.dims, vocal=vocal)
-        if type(res) == field:
-            return res.values
-        else:
-            return res
+        return self.integrate_dimensions(dims=self.dims, vocal=vocal)
     
     def integrate_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> "field":
         # check whether lists of dimensions and limits match in length
@@ -112,9 +108,9 @@ class field():
 
             # actual integration
             ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))]
-            integrand = np.trapz(integrand[ilim[0]:ilim[1]+1], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=idim)
+            integrand = np.trapz(integrand[ilim[0]:ilim[1]+1], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=0)
         
-        if type(integrand) == float:
+        if isinstance(integrand, float):
             return integrand
         else:
             return field(integrand, [self.coordinates[dim] for dim in self.dims if dim not in dims])
