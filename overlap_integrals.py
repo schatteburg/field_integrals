@@ -114,29 +114,27 @@ class field():
 
         mg = np.meshgrid(*[coord for dim, coord in self.coordinates.items()], indexing="ij")
 
-        # # # adapting line element for polar/cylindrical/spherical coordinates
-        # if self.coordinate_system in ["polar", "cylindrical"]:
-        #     if "r" in dims:
-        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")]
-        # elif self.coordinate_system == "spherical":
-        #     if "r" in dims and "theta" in dims":
-        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")]**2 * np.sin(mg[list(self.coordinates.keys()).index("theta")]) # multiply with r^2*sin(theta) when integrating over r and theta in spherical coordinates
-        #     elif "r" in dims:
-        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over r in spherical coordinates
-        #     elif "theta" in dims:
-        #         integrand = integrand*np.sin(mg[list(self.coordinates.keys()).index("theta")])
-        # elif self.coordinate_system == "cartesian":
-        #     pass
-        # else:
-        #     raise ValueError(f"Coordinate system {self.coordinate_system} is not supported.")
+        # # adapting line element for polar/cylindrical/spherical coordinates
+        if self.coordinate_system in ["polar", "cylindrical"]:
+            if "phi" in dims:
+                integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over phi in polar/cylindrical coordinates
+        elif self.coordinate_system == "spherical":
+            if "theta" in dims:
+                integrand = integrand*mg[list(self.coordinates.keys()).index("r")] * np.sin(mg[list(self.coordinates.keys()).index("theta")]) # multiply with r*sin(theta) when integrating over theta in spherical coordinates
+            elif "phi" in dims:
+                integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over phi in spherical coordinates
+        elif self.coordinate_system == "cartesian":
+            pass
+        else:
+            raise ValueError(f"Integration of coordinate system {self.coordinate_system} is not supported.")
 
-        if "r" in dims:
-            if self.coordinate_system == "spherical":
-                integrand = integrand*mg[list(self.coordinates.keys()).index("r")]**2 # multiply with r^2 when integrating over r in spherical coordinates
-            else:
-                integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over r in polar/cylindrical coordinates
-        if "theta" in dims:
-            integrand = integrand*np.sin(mg[list(self.coordinates.keys()).index("theta")]) # multiply with r when integrating over theta
+        # if "r" in dims:
+        #     if self.coordinate_system == "spherical":
+        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")]**2 # multiply with r^2 when integrating over r in spherical coordinates
+        #     else:
+        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over r in polar/cylindrical coordinates
+        # if "theta" in dims:
+        #     integrand = integrand*np.sin(mg[list(self.coordinates.keys()).index("theta")]) # multiply with r when integrating over theta
 
         for idim, (dim, limit) in enumerate(zip(dims,limits)):
             # check whether limits are valid for each dimension
