@@ -20,44 +20,70 @@ def checked_field_compatibility(func: callable) -> callable:
 class field():
 
     def __init__(self, fieldvalues: np.ndarray, coordinates: dict, coordinate_system=None, vocal=False) -> None:
-        # if not (type(fieldvalues) == np.ndarray and type(coordinates)==)
 
+        # check whether inputs are valid
+        self.check_coordinates(fieldvalues, coordinates)
+        self.coordinate_system = self.check_coordinate_system(coordinates, coordinate_system)
+        if vocal:
+            print("inputs are valid")
+        
+        self.values = fieldvalues
+        self.shape = fieldvalues.shape
+        self.coordinates = coordinates
+        self.dims = list(coordinates.keys())
+        self.ndims = len(coordinates)
+        if vocal:
+            print(self)
+
+    @staticmethod
+    def check_coordinates(fieldvalues: np.ndarray, coordinates: dict) -> None:
 
         # check whether number of dimensions match between inputs
         if not len(fieldvalues.shape) == len(coordinates):
             raise ValueError(f"Number of dimensions of inputs don't match:\nlen(fieldvalues.shape) = {len(fieldvalues.shape)};\tlen(coordinates) = {len(coordinates)}.")
-        else:
-            self.ndims = len(coordinates)
         
         # check whether number of points per dimension match between inputs
         if not fieldvalues.shape == tuple(v.size for dim, v in coordinates.items()):
             raise ValueError(f"Number of points per dimension don't match between input variables.")
-        else:
-            self.shape = fieldvalues.shape
         
-        # check whether number of dimensions are supported
+        # check whether dimensions are supported
         for dim in coordinates.keys():
             if dim not in ["x","y","z","r","theta","phi"]:
                 raise ValueError(f"Dimension {dim} is not supported.")
-        if np.all([dim in ["x","y","z"] for dim in coordinates.keys()]):
-            self.coordinate_system = "cartesian"
-        elif set(["r","phi"]) == set(coordinates.keys()):
+
+    @staticmethod
+    def check_coordinate_system(coordinates: dict, coordinate_system=None) -> str:
+        def raise_not_matching_error() -> None:
+            raise ValueError(f"Coordinate system {coordinate_system} does not match coordinates {list(coordinates.keys())}.")
+        
+        # check whether coordinates fit to coordinate system, if specified
+        if len(coordinates) == 1 and "z" in coordinates.keys():
             if coordinate_system is None:
-                self.coordinate_system = "polar"
-            else:
-                self.coordinate_system = coordinate_system
-        elif set(["r","phi","z"]) == set(coordinates.keys()):
-            self.coordinate_system = "cylindrical"
-        elif set(["r","theta","phi"]) == set(coordinates.keys()):
-            self.coordinate_system = "spherical"
+                return "cartesian"
+            elif coordinate_system not in ["cartesian","cylindrical"]:
+                raise_not_matching_error()
+        elif np.all([dim in ["x","y","z"] for dim in coordinates.keys()]):
+            if coordinate_system is None:
+                return "cartesian"
+            elif coordinate_system != "cartesian":
+                raise_not_matching_error()
+        elif np.all([dim in ["r","phi"] for dim in coordinates.keys()]):
+            if coordinate_system is None:
+                return "polar"
+            elif coordinate_system not in ["polar", "cylindrical", "spherical"]:
+                raise_not_matching_error()
+        elif np.all([dim in ["r","phi","z"] for dim in coordinates.keys()]):
+            if coordinate_system is None:
+                return "cylindrical"
+            elif coordinate_system != "cylindrical":
+                raise_not_matching_error()
+        elif np.all([dim in ["r","theta","phi"] for dim in coordinates.keys()]):
+            if coordinate_system is None:
+                return "spherical"
+            elif coordinate_system != "spherical":
+                raise_not_matching_error()
         else:
             raise ValueError(f"Coordinate set {list(coordinates.keys())} is not supported.")
-        
-        self.values = fieldvalues
-        self.coordinates = coordinates
-        self.dims = list(coordinates.keys())
-        if vocal:
-            print(self)
 
     def integrate_all_dimensions(self, vocal: bool = False) -> float:
         return self.integrate_dimensions(dims=self.dims, vocal=vocal)
