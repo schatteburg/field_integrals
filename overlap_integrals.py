@@ -1,4 +1,5 @@
 import numpy as np
+from matplotlib import pyplot as plt
 from scipy.integrate import quad
 from abc import ABC
 
@@ -15,6 +16,8 @@ def check_field_compatibility(func: callable) -> callable:
 
     return wrapper
 
+def todo_error():
+    raise NotImplementedError(f"Please implement this method (completely).")
 
 
 class field():
@@ -155,9 +158,7 @@ class field():
             return integrand
         else:
             return field(integrand, {dim: self.coordinates[dim] for dim in self.dims if dim not in dims}, coordinate_system=self.coordinate_system, vocal=vocal)
-            
-
-    
+        
     def normalize(self, vocal: bool = False)-> "field":
         return field(self.values/self.integrate_all_dimensions(vocal=vocal), self.coordinates)
     
@@ -166,6 +167,44 @@ class field():
         # N = (self*self.conj()).integrate_all_dimensions()
         return field(self.values/np.sqrt(N), self.coordinates)
     
+    def plot(self, vocal=False) -> None:
+        if self.ndims == 1:
+            self.plot_1D(dim=self.dims[0])
+        elif self.ndims == 2:
+            self.plot_2D(plane=self.dims)
+        elif self.ndims == 3:
+            if vocal:
+                print(f"Plotting 2D slice of 3D field at {self.dims[2]} index = {self.coordinates[self.dims[2]].size//2}.")
+            self.plot_2D(plane=self.dims[:2], icuts=self.coordinates[self.dims[2]].size//2)
+        else:
+            raise ValueError(f"Plotting of {self.ndims}D fields is not supported.")
+
+    def plot_1D(self, dim: str, icuts: dict = None) -> None:
+        if dim not in self.coordinates.keys():
+            raise ValueError(f"Dimension {dim} is not defined for this field.")
+        if icuts is None:
+            icuts = {odim: self.coordinates[odim].size//2 for odim in self.coordinates.keys() if odim != dim}
+        if len(icuts) != self.ndims-1:
+            raise ValueError(f"Number of indices for slicing ({len(icuts)}) does not match number of dimensions ({self.ndims}) minus one.")
+        indices = [slice(None)]*self.ndims
+        for odim in icuts.keys():
+            indices[self.dims.index(odim)] = icuts[odim]
+        plt.plot(self.coordinates[dim], self.values[tuple(indices)])
+        plt.xlabel(dim)
+        plt.ylabel("field value")
+        plt.show()
+
+    def plot_2D(self, plane: list[str], icuts: int = None) -> None:
+        
+        # check whether plane is valid
+        if len(plane) != 2:
+            raise ValueError(f"Plane {plane} is not valid. Please specify two dimensions.")
+        elif not np.all([dim in self.coordinates.keys() for dim in plane]):
+            raise ValueError(f"Plane {plane} is not valid. Please specify two dimensions from {self.coordinates.keys()}.")
+        elif plane[0] == plane[1]:
+            raise ValueError(f"Plane {plane} is not valid. Please specify two different dimensions.")
+        todo_error()
+
     @check_field_compatibility
     def overlap(self, other: "field", vocal: bool = False) -> float:
         return (self*other.conj()).integrate_all_dimensions(vocal=vocal)
