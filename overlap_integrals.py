@@ -4,7 +4,7 @@ from abc import ABC
 
 
 ######### decorators #########
-def checked_field_compatibility(func: callable) -> callable:
+def check_field_compatibility(func: callable) -> callable:
     def wrapper(self, other: "field", *args, **kwargs):
         if not self.coordinates == other.coordinates:
             raise ValueError(f"Coordinates of fields don't match!")
@@ -60,27 +60,37 @@ class field():
         if len(coordinates) == 1 and "z" in coordinates.keys():
             if coordinate_system is None:
                 return "cartesian"
-            elif coordinate_system not in ["cartesian","cylindrical"]:
+            elif coordinate_system in ["cartesian","cylindrical"]:
+                return coordinate_system
+            else:
                 raise_not_matching_error()
         elif np.all([dim in ["x","y","z"] for dim in coordinates.keys()]):
             if coordinate_system is None:
                 return "cartesian"
-            elif coordinate_system != "cartesian":
+            elif coordinate_system == "cartesian":
+                return coordinate_system
+            else:
                 raise_not_matching_error()
         elif np.all([dim in ["r","phi"] for dim in coordinates.keys()]):
             if coordinate_system is None:
                 return "polar"
-            elif coordinate_system not in ["polar", "cylindrical", "spherical"]:
+            elif coordinate_system in ["polar", "cylindrical", "spherical"]:
+                return coordinate_system
+            else:
                 raise_not_matching_error()
         elif np.all([dim in ["r","phi","z"] for dim in coordinates.keys()]):
             if coordinate_system is None:
                 return "cylindrical"
-            elif coordinate_system != "cylindrical":
+            elif coordinate_system == "cylindrical":
+                return coordinate_system
+            else:
                 raise_not_matching_error()
         elif np.all([dim in ["r","theta","phi"] for dim in coordinates.keys()]):
             if coordinate_system is None:
                 return "spherical"
-            elif coordinate_system != "spherical":
+            elif coordinate_system == "spherical":
+                return coordinate_system
+            else:
                 raise_not_matching_error()
         else:
             raise ValueError(f"Coordinate set {list(coordinates.keys())} is not supported.")
@@ -89,36 +99,29 @@ class field():
         return self.integrate_dimensions(dims=self.dims, vocal=vocal)
     
     def integrate_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> "field":
+
         # check whether lists of dimensions and limits match in length
         if limits is None:
             limits = [(self.coordinates[dim][0], self.coordinates[dim][-1]) for dim in dims]
         elif len(dims) != len(limits):
             raise ValueError(f"Number of dimensions ({len(dims)}) and limits ({len(limits)}) don't match.")
         
-
         integrand = self.values
-        # if self.coordinate_system == "cartesian":
-        #     integrand = self.values
-        # # adapting line element for polar/cylindrical/spherical coordinates
-        # elif self.coordinate_system == "polar":
-        #     rg, phig = np.meshgrid(self.coordinates["r"], self.coordinates["phi"], indexing="ij")
-        #     integrand = self.values*rg
-        # elif self.coordinate_system == "cylindrical":
-        #     rg, phig, zg = np.meshgrid(self.coordinates["r"], self.coordinates["phi"], self.coordinates["z"], indexing="ij")
-        #     integrand = self.values*rg
-        # elif self.coordinate_system == "spherical":
-        #     rg, thetag, phig = np.meshgrid(self.coordinates["r"], self.coordinates["theta"], self.coordinates["phi"], indexing="ij")
-        #     integrand = self.values*rg*rg*np.sin(thetag)
-        # else:
-        #     raise ValueError(f"Coordinate system {self.coordinate_system} is not supported.")
-
         mg = np.meshgrid(*[coord for dim, coord in self.coordinates.items()], indexing="ij")
 
         # # adapting line element for polar/cylindrical/spherical coordinates
         if self.coordinate_system in ["polar", "cylindrical"]:
+            if "r" in dims:
+                if "phi" in self.dims and "phi" not in dims:
+                    raise ValueError(f"Integration over r collapses that dimension, but for a future integration over phi, r is needed. If you want to integrate over both, include both r and phi in dims.")
             if "phi" in dims:
                 integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over phi in polar/cylindrical coordinates
         elif self.coordinate_system == "spherical":
+            if "r" in dims:
+                if "theta" in self.dims and "theta" not in dims:
+                    raise ValueError(f"Integration over r collapses that dimension, but for a future integration over theta, r is needed. If you want to integrate over both, include both r and theta in dims.")
+                elif "phi" in self.dims and "phi" not in dims:
+                    raise ValueError(f"Integration over r collapses that dimension, but for a future integration over phi, r is needed. If you want to integrate over both, include both r and phi in dims.")
             if "theta" in dims:
                 integrand = integrand*mg[list(self.coordinates.keys()).index("r")] * np.sin(mg[list(self.coordinates.keys()).index("theta")]) # multiply with r*sin(theta) when integrating over theta in spherical coordinates
             elif "phi" in dims:
@@ -128,14 +131,7 @@ class field():
         else:
             raise ValueError(f"Integration of coordinate system {self.coordinate_system} is not supported.")
 
-        # if "r" in dims:
-        #     if self.coordinate_system == "spherical":
-        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")]**2 # multiply with r^2 when integrating over r in spherical coordinates
-        #     else:
-        #         integrand = integrand*mg[list(self.coordinates.keys()).index("r")] # multiply with r when integrating over r in polar/cylindrical coordinates
-        # if "theta" in dims:
-        #     integrand = integrand*np.sin(mg[list(self.coordinates.keys()).index("theta")]) # multiply with r when integrating over theta
-
+        # loop over dimensions to integrate
         for idim, (dim, limit) in enumerate(zip(dims,limits)):
             # check whether limits are valid for each dimension
             if dim not in self.coordinates.keys():
@@ -148,29 +144,17 @@ class field():
             if vocal:
                 print(f"integrating dimension {idim}: {dim} from {limit[0]} to {limit[1]}")
 
-            # if dim == "r":
-            #     rg, *_ = np.meshgrid(*[coord for dim, coord in self.coordinates.items()], indexing="ij")
-            #     if self.coordinate_system == "spherical":
-            #         integrand = integrand*rg**2 # multiply with r^2 when integrating over r in spherical coordinates
-            #     else:
-            #         integrand = integrand*rg # multiply with r when integrating over r in polar/cylindrical coordinates
-            # elif dim == "theta":
-            #     rg, thetag, phig = np.meshgrid(self.coordinates["r"], self.coordinates["theta"], self.coordinates["phi"], indexing="ij")
-            #     integrand = integrand*np.sin(thetag) # multiply with r when integrating over theta
-                
-
             # actual integration
-            ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))]
-            integrand = np.trapz(integrand[ilim[0]:ilim[1]+1], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=self.dims.index(dim)-idim)
+            axis = self.dims.index(dim)-idim # which axis to integrate over
+            ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))] # indices of integration limits for that dimension
+            indices = [slice(None)]*(self.ndims - idim)
+            indices[axis] = slice(ilim[0],ilim[1]+1)
+            integrand = np.trapz(integrand[tuple(indices)], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=axis)
         
         if isinstance(integrand, float):
             return integrand
         else:
-            if self.coordinate_system == "spherical" and "theta" in dims:
-                new_coodinate_system = "spherical"
-            else:
-                new_coodinate_system = None
-            return field(integrand, {dim: self.coordinates[dim] for dim in self.dims if dim not in dims}, coordinate_system=new_coodinate_system, vocal=vocal)
+            return field(integrand, {dim: self.coordinates[dim] for dim in self.dims if dim not in dims}, coordinate_system=self.coordinate_system, vocal=vocal)
             
 
     
@@ -182,7 +166,7 @@ class field():
         # N = (self*self.conj()).integrate_all_dimensions()
         return field(self.values/np.sqrt(N), self.coordinates)
     
-    @checked_field_compatibility
+    @check_field_compatibility
     def overlap(self, other: "field", vocal: bool = False) -> float:
         return (self*other.conj()).integrate_all_dimensions(vocal=vocal)
     
@@ -201,23 +185,23 @@ class field():
         return field(self.values**power, self.coordinates)
     
     # binary operators
-    @checked_field_compatibility
+    @check_field_compatibility
     def __eq__(self, other: "field") -> bool:
         return np.all(self.values == other.values) and np.all(self.coordinates == other.coordinates)
     
-    @checked_field_compatibility
+    @check_field_compatibility
     def __add__(self, other: "field") -> "field":
         return field(self.values+other.values, self.coordinates)
     
-    @checked_field_compatibility
+    @check_field_compatibility
     def __sub__(self, other: "field") -> "field":
         return field(self.values-other.values, self.coordinates)
     
-    @checked_field_compatibility
+    @check_field_compatibility
     def __mul__(self, other: "field") -> "field":
         return field(self.values*other.values, self.coordinates)
 
-    @checked_field_compatibility
+    @check_field_compatibility
     def __truediv__(self, other: "field") -> "field":
         return field(self.values/other.values, self.coordinates)
 
