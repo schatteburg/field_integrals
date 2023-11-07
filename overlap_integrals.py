@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.integrate import quad
+from scipy.interpolate import RegularGridInterpolator, CloughTocher2DInterpolator
 from abc import ABC
 
 
@@ -204,6 +205,27 @@ class field():
         elif plane[0] == plane[1]:
             raise ValueError(f"Plane {plane} is not valid. Please specify two different dimensions.")
         todo_error()
+    
+    def make_interpolator(self) -> callable:
+        if self.coordinate_system == "cartesian":
+            return RegularGridInterpolator([coord for dim, coord in self.coordinates.items()], self.values)
+        else:
+            return CloughTocher2DInterpolator(list(zip(*[coord.flat for dim, coord in self.coordinates.items()])), self.values.flat)
+    
+    def interpolate_to_coordinates(self, coordinates: dict) -> "field":
+
+        # check whether dimensions are supported
+        for dim in coordinates.keys():
+            if dim not in ["x","y","z","r","theta","phi"]:
+                raise ValueError(f"Dimension {dim} is not supported.")
+        
+        interpolator = self.make_interpolator()
+        
+        # convert coordinates if needed
+        todo_error()
+
+        mg = np.meshgrid(*[coord for dim, coord in coordinates.items()], indexing="ij")
+        return field(interpolator(mg), coordinates)
 
     @check_field_compatibility
     def overlap(self, other: "field", vocal: bool = False) -> float:
