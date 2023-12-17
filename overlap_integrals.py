@@ -318,6 +318,14 @@ class field():
         mg = np.meshgrid(*[coord for dim, coord in coordinates.items()], indexing="ij")
         return field(interpolator(mg), coordinates)
 
+    def save(self, filename: str) -> None:
+        np.savez(filename, values=self.values, coordinates=self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=self.name)
+    
+    @staticmethod
+    def load(filename: str) -> "field":
+        data = np.load(filename, allow_pickle=True)
+        return field(data["values"], data["coordinates"], coordinate_system=data["coordinate_system"], units=data["units"], name=data["name"])
+
     @check_field_compatibility
     def overlap(self, other: "field", vocal: bool = False) -> float:
         return (self*other.conj()).integrate_all_dimensions(vocal=vocal)
