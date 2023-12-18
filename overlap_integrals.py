@@ -142,6 +142,10 @@ class field():
             limits = [(self.coordinates[dim][0], self.coordinates[dim][-1]) for dim in dims]
         elif len(dims) != len(limits):
             raise ValueError(f"Number of dimensions ({len(dims)}) and limits ({len(limits)}) don't match.")
+        else:
+            for ilim, lim in enumerate(limits):
+                if lim==None:
+                    limits[ilim] = (self.coordinates[dims[ilim]][0], self.coordinates[dims[ilim]][-1])
         
         integrand = self.values
         mg = np.meshgrid(*[coord for dim, coord in self.coordinates.items()], indexing="ij")
@@ -179,7 +183,12 @@ class field():
                 raise ValueError(f"Integration limits {limit} are out of bounds for dimension {dim}.")
 
             if vocal:
-                print(f"integrating dimension {idim}: {dim} from {limit[0]} to {limit[1]}")
+                if self.name is not None:
+                    ptext = f"{self.name}: "
+                else:
+                    ptext = ""
+                ptext += f"integrating dimension {idim}: {dim} from {limit[0]} to {limit[1]}"
+                print(ptext)
 
             # actual integration
             axis = self.dims.index(dim)-idim # which axis to integrate over
