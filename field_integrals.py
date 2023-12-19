@@ -1,8 +1,11 @@
 import numpy as np
 from matplotlib import pyplot as plt
+import os
 from scipy.integrate import quad
 from scipy.interpolate import RegularGridInterpolator, CloughTocher2DInterpolator
 import math
+import pickle
+import pandas as pd
 
 ######### decorators #########
 def check_field_compatibility(func: callable) -> callable:
@@ -287,7 +290,7 @@ class field():
         
         return fig, ax
 
-    def stitch(self, other: "field", dim: str, vocal: bool = False) -> "field":
+    def stitch(self, other: "field", dim: str, newname: str = None, vocal: bool = False) -> "field":
         if not self.coordinate_system == other.coordinate_system:
             raise ValueError(f"Coordinate systems of fields don't match.")
         if dim not in self.coordinates.keys() or dim not in other.coordinates.keys():
@@ -299,6 +302,8 @@ class field():
             raise ValueError(f"Units of fields don't match.")
         if vocal:
             print(f"Stitching fields along dimension {dim}.")
+        if newname is None:
+            newname = self.name+"+"+other.name
 
         values = np.concatenate((self.values, other.values), axis=self.dims.index(dim))
         coordinates = self.coordinates.copy()
@@ -328,12 +333,45 @@ class field():
         return field(interpolator(mg), coordinates)
 
     def save(self, filename: str) -> None:
-        np.savez(filename, values=self.values, coordinates=self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=self.name)
+        if filename[-7:] != ".pickle":
+            filename += ".pickle"
+        with open(filename, "wb") as f:
+            pickle.dump(self, f)
     
     @staticmethod
     def load(filename: str) -> "field":
-        data = np.load(filename, allow_pickle=True)
-        return field(data["values"], data["coordinates"], coordinate_system=data["coordinate_system"], units=data["units"], name=data["name"])
+        if filename[-7:] != ".pickle":
+            filename += ".pickle"
+        with open(filename, "rb") as f:
+            return pickle.load(f)
+    
+    def export_to_csv(self, filename: str = None) -> None:
+        if filename is None:
+            filename = self.name+".csv"
+            print(f"No filename given, exporting field to {filename}.")
+        elif filename[-4:] != ".csv":
+            filename += ".csv"
+        
+        mg = np.meshgrid(*[coord for dim, coord in self.coordinates.items()], indexing="ij")
+        dfvalues = np.array([*[coord.flatten() for coord in mg], self.values.flatten()]).T
+        colnames = list(self.coordinates.keys()) + ["field"]
+        for colname in colnames:
+            if self.units[colname] is not None:
+                colnames[colnames.index(colname)] += f" ({self.units[colname]})"
+        df = pd.DataFrame(dfvalues, columns=colnames)
+        df.to_csv(filename, index=False)
+    
+    @staticmethod
+    def load_from_csv(filename: str, newname: str = None) -> "field":
+        if filename[-4:] != ".csv":
+            filename += ".csv"
+        df = pd.read_csv(filename)
+        coordinates = {colname.split(" (")[0]: np.unique(df[colname].to_numpy()) for colname in df.columns[:-1]}
+        units = {colname.split(" (")[0]: colname.split(" (")[1][:-1] for colname in df.columns if "(" in colname}
+        values = df[df.columns[-1]].to_numpy().reshape([coordinates[dim].size for dim in coordinates.keys()])
+        if newname is None:
+            newname = os.path.split(filename)[-1][:-4]
+        return field(values, coordinates, units=units, name=newname)
 
     @check_field_compatibility
     def overlap(self, other: "field", vocal: bool = False) -> float:
