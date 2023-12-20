@@ -7,6 +7,9 @@ import math
 import pickle
 import pandas as pd
 
+from collections.abc import Sequence
+from typing import Union
+
 ######### decorators #########
 def check_field_compatibility(func: callable) -> callable:
     def wrapper(self, other: "field", *args, **kwargs):
@@ -25,7 +28,7 @@ def todo_error():
 
 class field():
 
-    def __init__(self, fieldvalues: np.ndarray, coordinates: dict, units: dict = None, coordinate_system: str = None, name: str = None, vocal: bool = False) -> None:
+    def __init__(self, fieldvalues: np.ndarray, coordinates: dict[str, Sequence[float]], units: dict[str, str] = None, coordinate_system: str = None, name: str = None, vocal: bool = False) -> None:
 
         # check whether inputs are valid
         self.values, self.coordinates = self.check_coordinates(fieldvalues, coordinates)
@@ -43,7 +46,7 @@ class field():
             print(self)
 
     @staticmethod
-    def check_coordinates(fieldvalues: np.ndarray, coordinates: dict) -> None:
+    def check_coordinates(fieldvalues: np.ndarray, coordinates: dict[str, Sequence[float]]) -> tuple[np.ndarray, dict[str, Sequence[float]]]:
 
         # check whether number of dimensions match between inputs
         if not len(fieldvalues.shape) == len(coordinates):
@@ -61,7 +64,7 @@ class field():
         return fieldvalues, coordinates
 
     @staticmethod
-    def check_coordinate_system(coordinates: dict, coordinate_system=None) -> str:
+    def check_coordinate_system(coordinates: dict[str, Sequence[float]], coordinate_system: str = None) -> str:
         def raise_not_matching_error() -> None:
             raise ValueError(f"Coordinate system {coordinate_system} does not match coordinates {list(coordinates.keys())}.")
         
@@ -105,7 +108,7 @@ class field():
             raise ValueError(f"Coordinate set {list(coordinates.keys())} is not supported.")
     
     @staticmethod
-    def check_units(coordinates: dict, units: dict) -> None:
+    def check_units(coordinates: dict[str, Sequence[float]], units: dict[str, str]) -> dict[str, str]:
         if units is None:
             units = {dim: None for dim in coordinates.keys()}
             units["field"] = None
@@ -125,7 +128,7 @@ class field():
         return units
 
     @staticmethod
-    def check_name(name) -> None:
+    def check_name(name) -> str:
         if name is not None:
             if isinstance(name, str):
                 return name
@@ -138,7 +141,7 @@ class field():
     def integrate_all_dimensions(self, vocal: bool = False) -> float:
         return self.integrate_dimensions(dims=self.dims, vocal=vocal)
     
-    def integrate_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> "field":
+    def integrate_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> Union["field", float]:
 
         # check whether lists of dimensions and limits match in length
         if limits is None:
@@ -196,9 +199,12 @@ class field():
             # actual integration
             axis = self.dims.index(dim)-idim # which axis to integrate over
             ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))] # indices of integration limits for that dimension
-            indices = [slice(None)]*(self.ndims - idim)
-            indices[axis] = slice(ilim[0],ilim[1]+1)
-            integrand = np.trapz(integrand[tuple(indices)], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=axis)
+            integrand = np.trapz(np.take(integrand,range(ilim[0],ilim[1]+1),axis=axis), x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=axis)
+
+            # old version to get new integrand:
+            # indices = [slice(None)]*(self.ndims - idim)
+            # indices[axis] = slice(ilim[0],ilim[1]+1)
+            # integrand = np.trapz(integrand[tuple(indices)], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=axis)
         
         if isinstance(integrand, float):
             return integrand
@@ -213,11 +219,26 @@ class field():
         # N = (self*self.conj()).integrate_all_dimensions()
         return field(self.values/np.sqrt(N), self.coordinates)
     
-    def plot(self, vocal=False, figax: tuple[plt.figure, plt.axes] = None, plotkwargs: dict = {}, cbarkwargs: dict = {}) -> None:
+    def crosscut(self, dim: str, icut: int, newname: str = None) -> "field":
+        if dim not in self.coordinates.keys():
+            raise ValueError(f"Dimension {dim} is not defined for this field.")
+        if icut < 0 or icut >= self.coordinates[dim].size:
+            raise ValueError(f"Index {icut} for dimension {dim} is out of bounds.")
+        if newname is None:
+            newname = self.name + "_crosscut_" + f"i{dim}={icut}"
+        values = self.values.copy()
+        coordinates = self.coordinates.copy()
+        units = self.units.copy()
+        values = np.take(values, icut, axis=self.dims.index(dim))
+        del coordinates[dim]
+        del units[dim]
+        return field(values, coordinates, coordinate_system=self.coordinate_system, units=units, name=newname)
+    
+    def plot(self, vocal=False, figax: tuple[plt.figure, plt.axes] = None, plotkwargs: dict = {}, cbarkwargs: dict = {}) -> tuple[plt.figure, plt.axes]:
         if self.ndims == 1:
-            fig, ax = self.plot_1D(dim=self.dims[0], figax=figax, plotkwargs=plotkwargs)
+            fig, ax = self.plot_1D(figax=figax, plotkwargs=plotkwargs)
         elif self.ndims == 2:
-            fig, ax = self.plot_2D(plane=self.dims, figax=figax, plotkwargs=plotkwargs, cbarkwargs=cbarkwargs)
+            fig, ax = self.plot_2D(figax=figax, plotkwargs=plotkwargs, cbarkwargs=cbarkwargs)
         elif self.ndims == 3:
             if vocal:
                 print(f"Plotting 2D slice of 3D field at {self.dims[2]} index = {self.coordinates[self.dims[2]].size//2}.")
@@ -226,20 +247,14 @@ class field():
             raise ValueError(f"Plotting of {self.ndims}D fields is not supported.")
         return fig, ax
 
-    def plot_1D(self, dim: str, icuts: dict = None, figax:  tuple[plt.figure, plt.axes] = None, plotkwargs: dict = {}) -> None:
-        if dim not in self.coordinates.keys():
-            raise ValueError(f"Dimension {dim} is not defined for this field.")
-        if icuts is None:
-            icuts = {odim: self.coordinates[odim].size//2 for odim in self.coordinates.keys() if odim != dim}
-        if len(icuts) != self.ndims-1:
-            raise ValueError(f"Number of indices for slicing ({len(icuts)}) does not match number of dimensions ({self.ndims}) minus one.")
-        indices = [slice(None)]*self.ndims
-        for odim in icuts.keys():
-            indices[self.dims.index(odim)] = icuts[odim]
+    def plot_1D(self, figax:  tuple[plt.figure, plt.axes] = None, plotkwargs: dict = {}) -> tuple[plt.figure, plt.axes]:
+        if self.ndims != 1:
+            raise ValueError(f"Field is not 1D.")
 
         if figax is None:
             fig, ax = plt.subplots()
-        ax.plot(self.coordinates[dim], self.values[tuple(indices)], **plotkwargs)
+        dim = self.dims[0]
+        ax.plot(self.coordinates[dim], self.values, **plotkwargs)
         xlabel = dim
         ylabel = "field"
         if self.units[xlabel] is not None:
@@ -252,41 +267,29 @@ class field():
 
         return fig, ax
 
-    def plot_2D(self, plane: list[str] = None, icuts: int = None, figax:  tuple[plt.figure, plt.axes] = None, plotkwargs: dict = {}, cbarkwargs: dict = {}) -> tuple[plt.figure, plt.axes]:
-        
-        if plane is None:
-            plane = self.dims[:2]
-        else:
-            # check whether plane is valid
-            if len(plane) != 2:
-                raise ValueError(f"Plane {plane} is not valid. Please specify two dimensions.")
-            elif not np.all([dim in self.coordinates.keys() for dim in plane]):
-                raise ValueError(f"Plane {plane} is not valid. Please specify two dimensions from {self.coordinates.keys()}.")
-            elif plane[0] == plane[1]:
-                raise ValueError(f"Plane {plane} is not valid. Please specify two different dimensions.")
+    def plot_2D(self, figax:  tuple[plt.figure, plt.axes] = None, plotkwargs: dict = {}, cbarkwargs: dict = {}) -> tuple[plt.figure, plt.axes]:
+        if self.ndims != 2:
+            raise ValueError(f"Field is not 2D.")
         
         if figax is None:
             fig, ax = plt.subplots()
-        if self.ndims == 2:
-            x1g, x2g = np.meshgrid(self.coordinates[plane[0]], self.coordinates[plane[1]], indexing="ij")
-            im = ax.pcolormesh(x1g, x2g, self.values, **plotkwargs)
-            cbar = fig.colorbar(im, ax=ax, **cbarkwargs)
+        x1g, x2g = np.meshgrid(self.coordinates[self.dims[0]], self.coordinates[self.dims[1]], indexing="ij")
+        im = ax.pcolormesh(x1g, x2g, self.values, **plotkwargs)
+        cbar = fig.colorbar(im, ax=ax, **cbarkwargs)
 
-            # labels
-            xlabel, ylabel = plane
-            cbarlabel = "field"
-            if self.units[xlabel] is not None:
-                xlabel += f" ({self.units[xlabel]})"
-            if self.units[ylabel] is not None:
-                ylabel += f" ({self.units[ylabel]})"
-            if self.units["field"] is not None:
-                cbarlabel += f" ({self.units['field']})"
-            ax.set_xlabel(xlabel)
-            ax.set_ylabel(ylabel)
-            ax.set_title(self.name)
-            cbar.set_label(cbarlabel)
-        else:
-            todo_error()
+        # labels
+        xlabel, ylabel = self.dims
+        cbarlabel = "field"
+        if self.units[xlabel] is not None:
+            xlabel += f" ({self.units[xlabel]})"
+        if self.units[ylabel] is not None:
+            ylabel += f" ({self.units[ylabel]})"
+        if self.units["field"] is not None:
+            cbarlabel += f" ({self.units['field']})"
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(self.name)
+        cbar.set_label(cbarlabel)
         
         return fig, ax
 
@@ -310,6 +313,10 @@ class field():
         coordinates[dim] = np.append(self.coordinates[dim], other.coordinates[dim])
         print(values.shape, [coordinates[dim].shape for dim in coordinates.keys()])
         return field(values, coordinates, coordinate_system=self.coordinate_system, units=self.units, name=self.name, vocal=vocal)
+    
+    def split(self, dim: str, icuts: list[int], newname: str = None) -> list["field"]:
+        todo_error()
+
 
     def make_interpolator(self) -> callable:
         if self.coordinate_system == "cartesian":
