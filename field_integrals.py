@@ -309,8 +309,29 @@ class field():
         print(values.shape, [coordinates[dim].shape for dim in coordinates.keys()])
         return field(values, coordinates, coordinate_system=self.coordinate_system, units=self.units, name=self.name, vocal=vocal)
     
-    def split(self, dim: str, icuts: list[int], newname: str = None) -> list["field"]:
-        todo_error()
+    def split(self, dim: str, icuts: Union[int,list[int]], newname: str = None) -> list["field"]:
+        if dim not in self.coordinates.keys():
+            raise ValueError(f"Dimension {dim} is not defined for this field.")
+        if not isinstance(icuts, list):
+            icuts = [icuts]
+        for icut in icuts:
+            if icut <= 1 or icut >= self.coordinates[dim].size - 1:
+                raise ValueError(f"Index {icut} for dimension {dim} is out of bounds to produce cut.") # split results need to have at least 2 points in the dimension that is split
+        fields = []
+        for kcut in range(len(icuts)+1):
+            if kcut == 0:
+                indices = range(0,icuts[kcut])
+            elif kcut == len(icuts):
+                indices = range(icuts[kcut-1]+1,self.coordinates[dim].size)
+            else:
+                indices = range(icuts[kcut-1]+1,icuts[kcut])
+            coordinates = self.coordinates.copy()
+            coordinates[dim] = self.coordinates[dim][indices]
+            values = np.take(self.values, indices, axis=self.dims.index(dim))
+            if newname is None:
+                newname = self.name + "_split_" + f"{dim}+{kcut}"
+            fields.append(field(values, coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname))
+        return fields
 
 
     def make_interpolator(self) -> callable:
