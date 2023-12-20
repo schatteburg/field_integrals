@@ -200,11 +200,6 @@ class field():
             axis = self.dims.index(dim)-idim # which axis to integrate over
             ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))] # indices of integration limits for that dimension
             integrand = np.trapz(np.take(integrand,range(ilim[0],ilim[1]+1),axis=axis), x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=axis)
-
-            # old version to get new integrand:
-            # indices = [slice(None)]*(self.ndims - idim)
-            # indices[axis] = slice(ilim[0],ilim[1]+1)
-            # integrand = np.trapz(integrand[tuple(indices)], x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=axis)
         
         if isinstance(integrand, float):
             return integrand
