@@ -219,7 +219,7 @@ class field():
         return field(self.values/self.integrate_all_dimensions(vocal=vocal), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
     
     def normalize_abs2(self, vocal: bool = False) -> "field":
-        N = (self*self.conj()).integrate_all_dimensions()
+        N = (abs(self)**2).integrate_all_dimensions()
         newname = self.name + "_normalized_abs2"
         return field(self.values/np.sqrt(N), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
     
