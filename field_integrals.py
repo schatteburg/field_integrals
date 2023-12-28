@@ -208,15 +208,17 @@ class field():
         if isinstance(integrand, float):
             return integrand
         else:
-            return field(integrand, {dim: self.coordinates[dim] for dim in self.dims if dim not in dims}, coordinate_system=self.coordinate_system, vocal=vocal)
+            newname = self.name + "_integrated_" + "_".join([f"{dim}={limit[0]:.2E}-{limit[1]:.2E}" for dim, limit in zip(dims,limits)])
+            return field(integrand, {dim: self.coordinates[dim] for dim in self.dims if dim not in dims}, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
         
     def normalize(self, vocal: bool = False)-> "field":
-        return field(self.values/self.integrate_all_dimensions(vocal=vocal), self.coordinates)
+        newname = self.name + "_normalized"
+        return field(self.values/self.integrate_all_dimensions(vocal=vocal), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
     
     def normalize_abs2(self, vocal: bool = False) -> "field":
-        N = field(self.values*self.values.conj(), self.coordinates).integrate_all_dimensions(vocal=vocal)
-        # N = (self*self.conj()).integrate_all_dimensions()
-        return field(self.values/np.sqrt(N), self.coordinates)
+        N = (self*self.conj()).integrate_all_dimensions()
+        newname = self.name + "_normalized_abs2"
+        return field(self.values/np.sqrt(N), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
     
     def crosscut(self, dim: str, icut: int, newname: str = None) -> "field":
         if dim not in self.coordinates.keys():
@@ -294,7 +296,7 @@ class field():
         
         return fig, ax
 
-    def stitch(self, other: "field", dim: str, newname: str = None, vocal: bool = False) -> "field":
+    def stitch(self, other: "field", dim: str, newname: str = None) -> "field":
         if not self.coordinate_system == other.coordinate_system:
             raise ValueError(f"Coordinate systems of fields don't match.")
         if dim not in self.coordinates.keys() or dim not in other.coordinates.keys():
@@ -304,16 +306,14 @@ class field():
                 raise ValueError(f"Coordinates of dimension {odim} don't match between fields.")
         if not self.units == other.units:
             raise ValueError(f"Units of fields don't match.")
-        if vocal:
-            print(f"Stitching fields along dimension {dim}.")
         if newname is None:
-            newname = self.name+"+"+other.name
+            newname = self.name+"&"+other.name + "_stitched_" + f"{dim}"
 
         values = np.concatenate((self.values, other.values), axis=self.dims.index(dim))
         coordinates = self.coordinates.copy()
         coordinates[dim] = np.append(self.coordinates[dim], other.coordinates[dim])
         print(values.shape, [coordinates[dim].shape for dim in coordinates.keys()])
-        return field(values, coordinates, coordinate_system=self.coordinate_system, units=self.units, name=self.name, vocal=vocal)
+        return field(values, coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
     def split(self, dim: str, icuts: Union[int,list[int]], newname: str = None) -> list["field"]:
         if dim not in self.coordinates.keys():
