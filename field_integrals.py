@@ -193,7 +193,11 @@ class field():
                     ptext = f"{self.name}: "
                 else:
                     ptext = ""
-                ptext += f"integrating dimension {idim}: {dim} from {limit[0]} to {limit[1]}"
+                ptext += f"integrating dimension {idim}: {dim} from "
+                if self.units[dim] is not None:
+                    ptext += f"{limit[0]} {self.units[dim]} to {limit[1]} {self.units[dim]}"
+                else:
+                    ptext += f"{limit[0]} to {limit[1]}"
                 print(ptext)
 
             # actual integration
@@ -321,6 +325,7 @@ class field():
                 raise ValueError(f"Index {icut} for dimension {dim} is out of bounds to produce cut.") # split results need to have at least 2 points in the dimension that is split
         fields = []
         for kcut in range(len(icuts)+1):
+            #TODO: check whether icuts are implemented correctly
             if kcut == 0:
                 indices = range(0,icuts[kcut])
             elif kcut == len(icuts):
@@ -355,7 +360,8 @@ class field():
         todo_error()
 
         mg = np.meshgrid(*[coord for dim, coord in coordinates.items()], indexing="ij")
-        return field(interpolator(mg), coordinates)
+        
+        return field(interpolator(mg), coordinates, coordinate_system=self.coordinate_system, units=self.units, name=self.name)
 
     def save(self, filename: str) -> None:
         if filename[-7:] != ".pickle":
@@ -403,18 +409,21 @@ class field():
         return (self*other.conj()).integrate_all_dimensions(vocal=vocal)
     
     def conj(self) -> "field":
-        return field(self.values.conj(), self.coordinates)
+        newname = self.name + "_conj"
+        return field(self.values.conj(), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
 
     ######### magic methods #########
     # unary operators    
     def __repr__(self) -> str:
-        return f"field in {self.ndims}D, {self.coordinate_system} coordinates {list(self.coordinates.keys())} with shape {self.shape}"
+        return f"field in {self.ndims}D, {self.coordinate_system} coordinates {list(self.coordinates.keys())} with units {self.units} and shape {self.shape}"
     
     def __abs__(self) -> "field":
-        return field(np.abs(self.values), self.coordinates)
+        newname = self.name + "_abs"
+        return field(np.abs(self.values), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
     def __pow__(self, power: float) -> "field":
-        return field(self.values**power, self.coordinates)
+        newname = self.name + f"_pow{power}"
+        return field(self.values**power, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
     # binary operators
     @check_field_compatibility
@@ -423,19 +432,23 @@ class field():
     
     @check_field_compatibility
     def __add__(self, other: "field") -> "field":
-        return field(self.values+other.values, self.coordinates)
+        newname = self.name + "+" + other.name
+        return field(self.values+other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
     @check_field_compatibility
     def __sub__(self, other: "field") -> "field":
-        return field(self.values-other.values, self.coordinates)
+        newname = self.name + "-" + other.name
+        return field(self.values-other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
     @check_field_compatibility
     def __mul__(self, other: "field") -> "field":
-        return field(self.values*other.values, self.coordinates)
+        newname = self.name + "*" + other.name
+        return field(self.values*other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
 
     @check_field_compatibility
     def __truediv__(self, other: "field") -> "field":
-        return field(self.values/other.values, self.coordinates)
+        newname = self.name + "/" + other.name
+        return field(self.values/other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
 
 
     
