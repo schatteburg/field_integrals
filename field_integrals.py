@@ -220,7 +220,9 @@ class field():
         if icut < 0 or icut >= self.coordinates[dim].size:
             raise ValueError(f"Index {icut} for dimension {dim} is out of bounds.")
         if newname is None:
-            newname = self.name + "_crosscut_" + f"i{dim}={icut}"
+            newname = self.name + "_crosscut_" + f"{dim}={self.coordinates[dim][icut]:.2E}"
+            if self.units[dim] is not None:
+                newname += f" ({self.units[dim]})"
         values = self.values.copy()
         coordinates = self.coordinates.copy()
         units = self.units.copy()
