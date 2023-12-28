@@ -188,6 +188,10 @@ class field():
             if limit[0] < self.coordinates[dim][0] or limit[1] > self.coordinates[dim][-1]:
                 raise ValueError(f"Integration limits {limit} are out of bounds for dimension {dim}.")
 
+            # determining limits
+            axis = self.dims.index(dim)-idim # which axis to integrate over
+            ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))] # indices of integration limits for that dimension
+
             if vocal:
                 if self.name is not None:
                     ptext = f"{self.name}: "
@@ -195,20 +199,18 @@ class field():
                     ptext = ""
                 ptext += f"integrating dimension {idim}: {dim} from "
                 if self.units[dim] is not None:
-                    ptext += f"{limit[0]} {self.units[dim]} to {limit[1]} {self.units[dim]}"
+                    ptext += f"{self.coordinates[dim][ilim[0]]:g} {self.units[dim]} to {self.coordinates[dim][ilim[1]]:g} {self.units[dim]}"
                 else:
-                    ptext += f"{limit[0]} to {limit[1]}"
+                    ptext += f"{self.coordinates[dim][ilim[0]]:g} to {self.coordinates[dim][ilim[1]]:g}"
                 print(ptext)
 
             # actual integration
-            axis = self.dims.index(dim)-idim # which axis to integrate over
-            ilim = [np.argmin(np.abs(self.coordinates[dim]-limit[0])), np.argmin(np.abs(self.coordinates[dim]-limit[1]))] # indices of integration limits for that dimension
             integrand = np.trapz(np.take(integrand,range(ilim[0],ilim[1]+1),axis=axis), x=self.coordinates[dim][ilim[0]:ilim[1]+1], axis=axis)
         
         if isinstance(integrand, float):
             return integrand
         else:
-            newname = self.name + "_integrated_" + "_".join([f"{dim}={limit[0]:.2E}-{limit[1]:.2E}" for dim, limit in zip(dims,limits)])
+            newname = self.name + "_integrated_" + "_".join([f"{dim}={limit[0]:g}-{limit[1]:g}" for dim, limit in zip(dims,limits)])
             return field(integrand, {dim: self.coordinates[dim] for dim in self.dims if dim not in dims}, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
         
     def normalize(self, vocal: bool = False)-> "field":
@@ -226,7 +228,7 @@ class field():
         if icut < 0 or icut >= self.coordinates[dim].size:
             raise ValueError(f"Index {icut} for dimension {dim} is out of bounds.")
         if newname is None:
-            newname = self.name + "_crosscut_" + f"{dim}={self.coordinates[dim][icut]:.2E}"
+            newname = self.name + "_crosscut_" + f"{dim}={self.coordinates[dim][icut]:g}"
             if self.units[dim] is not None:
                 newname += f" ({self.units[dim]})"
         values = self.values.copy()
