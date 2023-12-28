@@ -41,6 +41,7 @@ class field():
         self.shape = self.values.shape
         self.dims = list(self.coordinates.keys())
         self.ndims = len(self.coordinates)
+        self.limits = {dim: (self.coordinates[dim][0], self.coordinates[dim][-1]) for dim in self.dims}
         
         if vocal:
             print(self)
