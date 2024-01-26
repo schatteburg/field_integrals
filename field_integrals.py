@@ -223,6 +223,10 @@ class field():
         newname = self.name + "_normalized_abs2"
         return field(self.values/np.sqrt(N), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
     
+    def average_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> Union["field", float]:
+        denominator = np.prod([abs(self.coordinates[dim][-1]-self.coordinates[dim][0]) for dim in dims])
+        return 1/denominator * self.integrate_dimensions(dims=dims, limits=limits, vocal=vocal)
+
     def crosscut(self, dim: str, icut: int, newname: str = None) -> "field":
         if dim not in self.coordinates.keys():
             raise ValueError(f"Dimension {dim} is not defined for this field.")
