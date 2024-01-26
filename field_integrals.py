@@ -11,8 +11,21 @@ from collections.abc import Sequence
 from typing import Union
 
 ######### decorators #########
-def check_field_compatibility(func: callable) -> callable:
+def check_field_compatibility_strict(func: callable) -> callable:
     def wrapper(self, other: "field", *args, **kwargs):
+        if not self.coordinates == other.coordinates:
+            raise ValueError(f"Coordinates of fields don't match!")
+        elif not self.shape == other.shape:
+            raise ValueError(f"Shapes of fields don't match: {self.shape} and {other.shape}.")
+        else:
+            return func(self, other, *args, **kwargs)
+
+    return wrapper
+
+def check_field_compatibility_incl_numbers(func: callable) -> callable:
+    def wrapper(self, other: Union["field",int,float,complex], *args, **kwargs):
+        if isinstance(other, (int,float,complex)):
+            return func(self, other, *args, **kwargs)
         if not self.coordinates == other.coordinates:
             raise ValueError(f"Coordinates of fields don't match!")
         elif not self.shape == other.shape:
@@ -138,6 +151,13 @@ class field():
         else:
             return None
             
+    def make_newname(self, addstr: str, other: "field" = None, endstr: str = None) -> Union[str,None]:
+        if self.name is None or (other is not None and other.name is None):
+            return None
+        if other is None:
+            return self.name + addstr
+        else:
+            return self.name + addstr + other.name
 
     def integrate_all_dimensions(self, vocal: bool = False) -> float:
         return self.integrate_dimensions(dims=self.dims, vocal=vocal)
@@ -211,16 +231,20 @@ class field():
         if isinstance(integrand, float):
             return integrand
         else:
-            newname = self.name + "_integrated_" + "_".join([f"{dim}={limit[0]:g}-{limit[1]:g}" for dim, limit in zip(dims,limits)])
-            return field(integrand, {dim: self.coordinates[dim] for dim in self.dims if dim not in dims}, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
+            newname = self.make_newname("_integrated_" + "_".join([f"{dim}={limit[0]:g}-{limit[1]:g}" for dim, limit in zip(dims,limits)]))
+            newcoordinates = self.coordinates.copy()
+            [newcoordinates.pop(dim) for dim in dims]
+            newunits = self.units.copy()
+            [newunits.pop(dim) for dim in dims]
+            return field(integrand, newcoordinates, coordinate_system=self.coordinate_system, units=newunits, name=newname, vocal=vocal)
         
     def normalize(self, vocal: bool = False)-> "field":
-        newname = self.name + "_normalized"
+        newname = self.make_newname("_normalized")
         return field(self.values/self.integrate_all_dimensions(vocal=vocal), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
     
     def normalize_abs2(self, vocal: bool = False) -> "field":
         N = (abs(self)**2).integrate_all_dimensions()
-        newname = self.name + "_normalized_abs2"
+        newname = self.make_newname("_normalized_abs2")
         return field(self.values/np.sqrt(N), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
     
     def average_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> Union["field", float]:
@@ -233,9 +257,10 @@ class field():
         if icut < 0 or icut >= self.coordinates[dim].size:
             raise ValueError(f"Index {icut} for dimension {dim} is out of bounds.")
         if newname is None:
-            newname = self.name + "_crosscut_" + f"{dim}={self.coordinates[dim][icut]:g}"
+            addstr = f"_crosscut_{dim}={self.coordinates[dim][icut]:g}"
             if self.units[dim] is not None:
-                newname += f" ({self.units[dim]})"
+                addstr += f" ({self.units[dim]})"
+            newname = self.make_newname(addstr)
         values = self.values.copy()
         coordinates = self.coordinates.copy()
         units = self.units.copy()
@@ -251,8 +276,11 @@ class field():
             fig, ax = self.plot_2D(figax=figax, plotkwargs=plotkwargs, cbarkwargs=cbarkwargs)
         elif self.ndims == 3:
             if vocal:
-                print(f"Plotting 2D slice of 3D field at {self.dims[2]} index = {self.coordinates[self.dims[2]].size//2}.")
-            fig, ax = self.plot_2D(plane=self.dims[:2], icuts=self.coordinates[self.dims[2]].size//2)
+                printtext = f"Plotting 2D slice of 3D field at {self.dims[2]} = {self.coordinates[self.dims[2]][self.coordinates[self.dims[2]].size//2]}."
+                if self.units[self.dims[2]] is not None:
+                    printtext += f" ({self.units[self.dims[2]]})"
+                print(printtext)
+            fig, ax = self.crosscut(self.dims[2], self.coordinates[self.dims[2]].size//2).plot_2D(figax=figax, plotkwargs=plotkwargs, cbarkwargs=cbarkwargs)
         else:
             raise ValueError(f"Plotting of {self.ndims}D fields is not supported.")
         return fig, ax
@@ -314,7 +342,7 @@ class field():
         if not self.units == other.units:
             raise ValueError(f"Units of fields don't match.")
         if newname is None:
-            newname = self.name+"&"+other.name + "_stitched_" + f"{dim}"
+            newname = self.make_newname("&", other=other, endstr="_stitched_"+f"{dim}")
 
         values = np.concatenate((self.values, other.values), axis=self.dims.index(dim))
         coordinates = self.coordinates.copy()
@@ -343,7 +371,7 @@ class field():
             coordinates[dim] = self.coordinates[dim][indices]
             values = np.take(self.values, indices, axis=self.dims.index(dim))
             if newname is None:
-                newname = self.name + "_split_" + f"{dim}+{kcut}"
+                newname = self.make_newname("_split_" + f"{dim}+{kcut}")
             fields.append(field(values, coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname))
         return fields
 
@@ -368,7 +396,8 @@ class field():
 
         mg = np.meshgrid(*[coord for dim, coord in coordinates.items()], indexing="ij")
         
-        return field(interpolator(mg), coordinates, coordinate_system=self.coordinate_system, units=self.units, name=self.name)
+        newname = self.make_newname("_interpolated")
+        return field(interpolator(mg), coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
 
     def save(self, filename: str) -> None:
         if filename[-7:] != ".pickle":
@@ -411,12 +440,12 @@ class field():
             newname = os.path.split(filename)[-1][:-4]
         return field(values, coordinates, units=units, name=newname)
 
-    @check_field_compatibility
+    @check_field_compatibility_strict
     def overlap(self, other: "field", vocal: bool = False) -> float:
         return (self*other.conj()).integrate_all_dimensions(vocal=vocal)
     
     def conj(self) -> "field":
-        newname = self.name + "_conj"
+        newname = self.make_newname("_conj")
         return field(self.values.conj(), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
 
     ######### magic methods #########
@@ -425,38 +454,62 @@ class field():
         return f"field in {self.ndims}D, {self.coordinate_system} coordinates {list(self.coordinates.keys())} with units {self.units} and shape {self.shape}"
     
     def __abs__(self) -> "field":
-        newname = self.name + "_abs"
+        newname = self.make_newname("_abs")
         return field(np.abs(self.values), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
     def __pow__(self, power: float) -> "field":
-        newname = self.name + f"_pow{power}"
-        return field(self.values**power, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+        newname = self.make_newname(f"_pow{power}")
+        return field(np.float_power(self.values,power), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
     # binary operators
-    @check_field_compatibility
+    @check_field_compatibility_strict
     def __eq__(self, other: "field") -> bool:
         return np.all(self.values == other.values) and np.all(self.coordinates == other.coordinates)
     
-    @check_field_compatibility
-    def __add__(self, other: "field") -> "field":
-        newname = self.name + "+" + other.name
-        return field(self.values+other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+    @check_field_compatibility_incl_numbers
+    def __add__(self, other: Union["field",int,float,complex]) -> "field":
+        if isinstance(other, field):
+            newname = self.make_newname("_+_",other)
+            return field(self.values+other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+        else:
+            newname = self.name
+            return field(self.values+other, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
-    @check_field_compatibility
-    def __sub__(self, other: "field") -> "field":
-        newname = self.name + "-" + other.name
-        return field(self.values-other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+    def __radd__(self, other):
+        return self.__add__(other)
     
-    @check_field_compatibility
-    def __mul__(self, other: "field") -> "field":
-        newname = self.name + "*" + other.name
-        return field(self.values*other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
-
-    @check_field_compatibility
-    def __truediv__(self, other: "field") -> "field":
-        newname = self.name + "/" + other.name
-        return field(self.values/other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
-
-
+    @check_field_compatibility_incl_numbers
+    def __sub__(self, other: Union["field",int,float,complex]) -> "field":
+        if isinstance(other, field):
+            newname = self.make_newname("_-_",other)
+            return field(self.values-other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+        else:
+            newname = self.name
+            return field(self.values-other, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
     
+    def __rsub__(self, other):
+        return (self*(-1)).__add__(other)
     
+    @check_field_compatibility_incl_numbers
+    def __mul__(self, other: Union["field",int,float,complex]) -> "field":
+        if isinstance(other, field):
+            newname = self.make_newname("_*_",other)
+            return field(self.values*other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+        else:
+            newname = self.name
+            return field(self.values*other, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+    
+    def __rmul__(self, other):
+        return self.__mul__(other)
+    
+    @check_field_compatibility_incl_numbers
+    def __truediv__(self, other: Union["field",int,float,complex]) -> "field":
+        if isinstance(other, field):
+            newname = self.make_newname("_/_",other)
+            return field(self.values/other.values, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+        else:
+            newname = self.name
+            return field(self.values/other, self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname)
+    
+    def __rtruediv__(self, other):
+        return (self**-1).__mul__(other)
