@@ -162,7 +162,7 @@ class field():
     def integrate_all_dimensions(self, vocal: bool = False) -> float:
         return self.integrate_dimensions(dims=self.dims, vocal=vocal)
     
-    def integrate_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> Union["field", float]:
+    def integrate_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, newname: str = None, vocal: bool = False) -> Union["field", float]:
 
         # check whether lists of dimensions and limits match in length
         if limits is None:
@@ -231,7 +231,8 @@ class field():
         if isinstance(integrand, float):
             return integrand
         else:
-            newname = self.make_newname("_integrated_" + "_".join([f"{dim}={limit[0]:g}-{limit[1]:g}" for dim, limit in zip(dims,limits)]))
+            if newname is None:
+                newname = self.make_newname("_integrated_" + "_".join([f"{dim}={limit[0]:g}-{limit[1]:g}" for dim, limit in zip(dims,limits)]))
             newcoordinates = self.coordinates.copy()
             [newcoordinates.pop(dim) for dim in dims]
             newunits = self.units.copy()
@@ -247,9 +248,10 @@ class field():
         newname = self.make_newname("_normalized_abs2")
         return field(self.values/np.sqrt(N), self.coordinates, coordinate_system=self.coordinate_system, units=self.units, name=newname, vocal=vocal)
     
-    def average_dimensions(self, dims: list[str], limits: list[tuple[float, float]] = None, vocal: bool = False) -> Union["field", float]:
-        denominator = np.prod([abs(self.coordinates[dim][-1]-self.coordinates[dim][0]) for dim in dims])
-        return 1/denominator * self.integrate_dimensions(dims=dims, limits=limits, vocal=vocal)
+    def average_dimensions(self, dims: list[str], vocal: bool = False) -> Union["field", float]:
+        denominator = np.prod([abs(self.coordinates[dim][-1] - self.coordinates[dim][0]) for dim in dims])
+        newname = self.make_newname("_averaged_" + "&".join(dims))
+        return self.integrate_dimensions(dims=dims, newname=newname, vocal=vocal)
 
     def crosscut(self, dim: str, icut: int, newname: str = None) -> "field":
         if dim not in self.coordinates.keys():
